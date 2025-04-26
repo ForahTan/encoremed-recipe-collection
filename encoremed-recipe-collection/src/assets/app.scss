@@ -23,7 +23,7 @@ body {
   box-shadow: 0 4px 12px rgba(92, 64, 51, 0.1);
   color: $primary-text;
   transition: transform 0.3s;
-  height: 460px;
+  height: 500px;
 
   &:hover {
     transform: scale(1.02);
@@ -41,7 +41,8 @@ body {
     height: 24px;
   }
 
-  img {
+  img,
+  .no-image {
     width: auto;
     height: 324px;
   }
@@ -206,6 +207,18 @@ li {
 
 .custom-btn:focus {
   outline: none;
+}
+
+.search-input,
+.filter {
+  padding: 10px;
+  margin-bottom: 20px;
+  width: 100%;
+  font-size: 16px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  width: 200px;
+  height: 46px;
 }
 
 @media (max-width: 768px) {

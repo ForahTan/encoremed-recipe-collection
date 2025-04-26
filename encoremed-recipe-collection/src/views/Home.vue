@@ -140,10 +140,31 @@
 
     <!-- begin::Discover -->
     <div class="row justify-content-center mt-5 discover">
+        <!-- begin::Title -->
         <div class="col-12">
             <h1>Discover</h1>
         </div>
-        <div class="col-md-4 mt-card" v-for="recipe in recipes">
+        <!-- end::Title -->
+
+        <!-- begin::Filter by Category | Search -->
+        <div class="col-12 text-end">
+            <!-- begin::Filter by Category -->
+            <select v-model="selectedCategory" class="border p-2 rounded w-full mb-4 filter me-3 text-capitalize">
+                <option value="">All Categories</option>
+                <option v-for="cat in uniqueCategories" :key="cat" :value="cat">
+                    {{ cat }}
+                </option>
+            </select>
+            <!-- end::Filter by Category -->
+
+            <!-- begin::Search -->
+            <input v-model="searchQuery" type="text" placeholder="Search for a recipe..." class="search-input">
+            <!-- end::Search -->
+        </div>
+        <!-- end::Filter by Category | Search -->
+
+        <!-- begin::Public Recipe List -->
+        <div v-if="recipes.length > 0" class="col-md-4 mt-card" v-for="recipe in recipes">
             <div class="card p-3">
                 <div class="d-flex justify-content-between">
                     <h5 class="card-title text-truncate">{{ recipe.name }}</h5>
@@ -152,14 +173,22 @@
                 </div>
 
                 <p class="card-text text-truncate">{{ recipe.description || "~" }}</p>
-                <img v-if="objectCount(recipe.image) == 0" :src="recipe.image">
-                <img v-else :src="recipe.image[0]">
+                <img v-if="recipe.image.length > 0" :src="recipe.image[0]"
+                    alt="The image is broken... Looks like it's on a coffee break!">
+                <div v-else class="no-image d-flex justify-content-center align-items-center">
+                    <p>Image got hungry. Ate itself</p>
+                </div>
 
                 <button type="button" class="btn btn-primary custom-btn" @click="view(recipe)">
                     View Recipe
                 </button>
             </div>
         </div>
+
+        <div v-else class="text-center">
+            <p>Oops! No recipes found. Maybe the recipe fairy is on vacation 🧚‍♂️</p>
+        </div>
+        <!-- end::Public Recipe List -->
     </div>
     <!-- end::Discover -->
 </template>
@@ -177,10 +206,40 @@ export default defineComponent({
             favoriteRecipes: [] as any, //The list with details
             message: null, // Will store the message for showing the popup
             messageType: '', // To distinguish between add/remove messages,
-            selectedRecipe: [] as any
+            selectedRecipe: [] as any,
+            searchQuery: "",
+            selectedCategory: "",
+            uniqueCategories: [] as any,
         }
     },
+    watch: {
+        searchQuery: function () {
+            this.recipes = this.recipes.filter((recipe: any) =>
+                recipe.name.toLowerCase().includes(this.searchQuery)
+            );
+            if (this.searchQuery == '') {
+                this.getData();
+            }
+        },
+        selectedCategory: function () {
+            // this.getData();
+            if (this.selectedCategory || this.selectedCategory != '') {
+                this.recipes = this.recipes.filter((recipe: any) => {
+                    // Ensure recipeCategory is a string or an array before attempting to split
+                    let categories: string[] = [];
 
+                    if (recipe.recipeCategory) {
+                        if (Array.isArray(recipe.recipeCategory)) {
+                            categories = recipe.recipeCategory;
+                        } else if (typeof recipe.recipeCategory === 'string') {
+                            categories = recipe.recipeCategory.split(',').map((cat: string) => cat.trim());
+                        }
+                    }
+                    return categories.some((category: string) => category === this.selectedCategory);
+                });
+            }
+        }
+    },
     computed: {
         productChunks() {
             const chunkSize = window.innerWidth <= 768 ? 1 : 3; // 1 on mobile, 3 on desktop
@@ -200,7 +259,16 @@ export default defineComponent({
         getData() {
             this.$axios.get('https://raw.githubusercontent.com/micahcochran/json-cookbook/refs/heads/main/cookbook-100.json').then((response) => {
                 this.recipes = response.data;
+
+                this.formatImages();
+                this.formatCategories();
+
+                this.recipes.forEach(element => {
+                    console.log(element.recipeCategory);
+                });
+
                 this.updateFavoriteList();
+                this.getCategoryList();
             })
         },
         objectCount(object) {
@@ -251,7 +319,7 @@ export default defineComponent({
         },
         updateFavoriteList() {
             this.favoriteRecipes = [];
-            if (localStorage.getItem('favoriteList').length > 0) {
+            if (localStorage.getItem('favoriteList') && localStorage.getItem('favoriteList').length > 0) {
                 this.favoriteList = localStorage.getItem('favoriteList').split(",");
                 if (this.favoriteList.length > 0) {
                     this.favoriteRecipes = this.favoriteList.map(name =>
@@ -267,8 +335,64 @@ export default defineComponent({
         },
         closeModal() {
             this.showModal = false;
-        }
-    },
+        },
+        getCategoryList() {
+            const allCategories: string[] = this.recipes.flatMap((recipe: any) => {
+                const rawCategory = recipe.recipeCategory
 
+                // If undefined/null, return empty array
+                if (!rawCategory) return []
+
+                // Normalize: if string, convert to array
+                const categories = Array.isArray(rawCategory)
+                    ? rawCategory
+                    : [rawCategory]
+
+                return categories.flatMap((cat: string) =>
+                    typeof cat === 'string' ? cat.split(',') : []
+                )
+            })
+
+            const cleaned = allCategories.map(c => c.trim()).filter(c => c.length > 0)
+            this.uniqueCategories = Array.from(new Set(cleaned)).sort()
+        },
+        capitalizeFirstLetter(string: string): string {
+            return string
+                .split(' ')
+                .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                .join(' ');
+        },
+        formatImages() {
+            this.recipes.forEach(element => {
+                if (element.image === undefined) {
+                    element.image = [];
+                }
+
+                if (typeof element.image === 'string') {
+                    element.image = [element.image.trim()];
+                }
+            });
+        },
+        formatCategories() {
+            this.recipes.forEach(element => {
+                if (element.recipeCategory === undefined) {
+                    element.recipeCategory = [];
+                }
+
+                if (typeof element.recipeCategory === 'string') {
+                    element.recipeCategory = [element.recipeCategory.trim()];
+                    element.recipeCategory = element.recipeCategory[0].split(",");
+                }
+
+                if (Array.isArray(element.recipeCategory)) {
+                    // If it's an array, capitalize each category
+                    element.recipeCategory = element.recipeCategory.map((cat: string) => this.capitalizeFirstLetter(cat));
+                } else if (typeof element.recipeCategory === 'string') {
+                    // If it's a string, split, capitalize, and join back
+                    element.recipeCategory = element.recipeCategory.split(',').map((cat: string) => this.capitalizeFirstLetter(cat.trim())).join(',');
+                }
+            });
+        }
+    }
 });
 </script>
