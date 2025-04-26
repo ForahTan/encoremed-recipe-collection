@@ -62,21 +62,30 @@
 
                                 <p><strong>Steps:</strong></p>
                                 <ol>
-                                    <li v-for="(step, index) in selectedRecipe.recipeInstructions || []" :key="index">{{
-                                        step.text || 'No step description available' }}</li>
+                                    <li v-for="(step, index) in selectedRecipe.recipeInstructions || []" :key="index">
+                                        <span v-if="step['itemListElement']">
+                                            {{ step.name }}
+
+                                            <ul>
+                                                <li v-if="step['itemListElement']"
+                                                    v-for="(sub_step, index2) in step['itemListElement']">
+                                                    {{ sub_step.text }}
+                                                </li>
+                                            </ul>
+                                        </span>
+
+                                        <span v-else>
+                                            {{
+                                                step.text || step || 'No step description available'
+                                            }}
+                                        </span>
+                                    </li>
                                 </ol>
 
-                                <p><strong>Prep Time:</strong> {{ selectedRecipe.prepTime || 'N/A' }}</p>
-                                <p><strong>Cook Time:</strong> {{ selectedRecipe.cookTime || 'N/A' }}</p>
-                                <p><strong>Total Time:</strong> {{ selectedRecipe.totalTime || 'N/A' }}</p>
+                                <p><strong>Prep Time:</strong> {{ selectedRecipe.prepTime }}</p>
+                                <p><strong>Cook Time:</strong> {{ selectedRecipe.cookTime }}</p>
+                                <p><strong>Total Time:</strong> {{ selectedRecipe.totalTime }}</p>
 
-                                <h6>Nutrition:</h6>
-                                <p><strong>Calories:</strong> {{ selectedRecipe.nutrition?.calories || 'N/A' }}</p>
-                                <p><strong>Carbohydrates:</strong> {{ selectedRecipe.nutrition?.carbohydrateContent ||
-                                    'N/A' }}g</p>
-
-                                <p><strong>Publisher:</strong> {{ selectedRecipe.publisher?.name || 'Unknown Publisher'
-                                }}</p>
                                 <p><strong>Category:</strong> {{ selectedRecipe.recipeCategory || 'N/A' }}</p>
                                 <p><strong>Cuisine:</strong> {{ selectedRecipe.recipeCuisine || 'N/A' }}</p>
 
@@ -113,7 +122,11 @@
                                     <a @click="favorite(recipe.name)" v-else><i class="bi bi-heart"></i></a>
                                 </div>
 
-                                <p class="card-text text-truncate">{{ recipe.description || "~" }}</p>
+                                <p class="card-text text-truncate">
+                                    {{
+                                        recipe.description || "No description, but lots of love"
+                                    }}
+                                </p>
 
                                 <button type="button" class="btn btn-primary custom-btn" @click="view(recipe)">
                                     View Recipe
@@ -149,7 +162,7 @@
         <!-- begin::Filter by Category | Search -->
         <div class="col-12 text-end">
             <!-- begin::Filter by Category -->
-            <select v-model="selectedCategory" class="border p-2 rounded w-full mb-4 filter me-3 text-capitalize">
+            <select v-model="selectedCategory" class="border p-2 rounded w-full mb-4 filter me-md-3 text-capitalize">
                 <option value="">All Categories</option>
                 <option v-for="cat in uniqueCategories" :key="cat" :value="cat">
                     {{ cat }}
@@ -172,7 +185,7 @@
                     <a @click="favorite(recipe.name)" v-else><i class="bi bi-heart"></i></a>
                 </div>
 
-                <p class="card-text text-truncate">{{ recipe.description || "~" }}</p>
+                <p class="card-text text-truncate">{{ recipe.description || "No description, but lots of love." }}</p>
                 <img v-if="recipe.image.length > 0" :src="recipe.image[0]"
                     alt="The image is broken... Looks like it's on a coffee break!">
                 <div v-else class="no-image d-flex justify-content-center align-items-center">
@@ -201,6 +214,7 @@ export default defineComponent({
     data() {
         return {
             showModal: false,
+            allRecipes: {} as any,
             recipes: {} as any,
             favoriteList: [] as any, // The list with name only
             favoriteRecipes: [] as any, //The list with details
@@ -214,7 +228,7 @@ export default defineComponent({
     },
     watch: {
         searchQuery: function () {
-            this.recipes = this.recipes.filter((recipe: any) =>
+            this.recipes = this.allRecipes.filter((recipe: any) =>
                 recipe.name.toLowerCase().includes(this.searchQuery)
             );
             if (this.searchQuery == '') {
@@ -222,21 +236,13 @@ export default defineComponent({
             }
         },
         selectedCategory: function () {
-            // this.getData();
             if (this.selectedCategory || this.selectedCategory != '') {
-                this.recipes = this.recipes.filter((recipe: any) => {
-                    // Ensure recipeCategory is a string or an array before attempting to split
-                    let categories: string[] = [];
-
-                    if (recipe.recipeCategory) {
-                        if (Array.isArray(recipe.recipeCategory)) {
-                            categories = recipe.recipeCategory;
-                        } else if (typeof recipe.recipeCategory === 'string') {
-                            categories = recipe.recipeCategory.split(',').map((cat: string) => cat.trim());
-                        }
-                    }
-                    return categories.some((category: string) => category === this.selectedCategory);
-                });
+                this.recipes = this.allRecipes.filter(r =>
+                    r.recipeCategory.includes(this.selectedCategory)
+                );
+            }
+            else {
+                this.getData();
             }
         }
     },
@@ -259,14 +265,14 @@ export default defineComponent({
         getData() {
             this.$axios.get('https://raw.githubusercontent.com/micahcochran/json-cookbook/refs/heads/main/cookbook-100.json').then((response) => {
                 this.recipes = response.data;
-
                 this.formatImages();
                 this.formatCategories();
+                this.formatInstruction();
+                this.formatTime();
+                this.formatCuisine();
+                this.formatKeywords();
 
-                this.recipes.forEach(element => {
-                    console.log(element.recipeCategory);
-                });
-
+                this.allRecipes = this.recipes;
                 this.updateFavoriteList();
                 this.getCategoryList();
             })
@@ -392,7 +398,81 @@ export default defineComponent({
                     element.recipeCategory = element.recipeCategory.split(',').map((cat: string) => this.capitalizeFirstLetter(cat.trim())).join(',');
                 }
             });
+        },
+        formatInstruction() {
+            this.recipes.forEach(element => {
+                if (typeof element.recipeInstructions === 'string') {
+                    element.recipeInstructions = element.recipeInstructions
+                        .split('\n')          // Split by line breaks
+                        .map(line => line.trim()) // Remove extra spaces
+                        .filter(line => line)     // Remove empty line
+                }
+            });
+        },
+        formatTime() {
+            this.recipes.forEach(element => {
+                element.prepTime = this.formatTimeText(element.prepTime);
+                element.cookTime = this.formatTimeText(element.cookTime);
+                element.totalTime = this.formatTimeText(element.totalTime);
+            });
+        },
+        formatTimeText(time) {
+            if (time === undefined) {
+                return "N/A";
+            }
+            else {
+
+                // Remove the "PT" part, leaving only the time information
+                time = time.slice(2);
+
+                // Regular expression to match the hours, minutes, and seconds
+                const regex = /^(\d+H)?(\d+M)?(\d+S)?$/;
+
+                const match = time.match(regex);
+                let formattedTime = '';
+
+                if (match) {
+                    // If hours are found, add them to the formatted string
+                    if (match[1]) {
+                        formattedTime += match[1].replace('H', ' hour') + ' ';
+                    }
+                    // If minutes are found, add them to the formatted string
+                    if (match[2]) {
+                        formattedTime += match[2].replace('M', ' minute') + ' ';
+                    }
+                    // If seconds are found, add them to the formatted string
+                    if (match[3]) {
+                        formattedTime += match[3].replace('S', ' second') + ' ';
+                    }
+                }
+                else {
+                    formattedTime = 'N/A'
+                }
+
+                return formattedTime.trim();
+            }
+        },
+        formatCuisine() {
+            this.recipes.forEach(element => {
+                if (element.recipeCuisine === undefined) {
+                    element.recipeCuisine = [];
+                }
+
+                if (typeof element.recipeCuisine === 'string') {
+                    element.recipeCuisine = [element.recipeCuisine.trim()];
+                    element.recipeCuisine = element.recipeCuisine[0].split(",");
+                }
+
+            });
+        },
+        formatKeywords() {
+            this.recipes.forEach(element => {
+                if (element.keywords === undefined) {
+                    element.keywords = "N/A";
+                }
+            });
         }
+
     }
 });
 </script>
